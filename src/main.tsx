@@ -717,18 +717,6 @@ function App() {
       return;
     }
 
-    if (navigator.permissions) {
-      try {
-        const permission = await navigator.permissions.query({ name: "geolocation" });
-        if (permission.state === "denied") {
-          setLocationStatus("blocked");
-          return;
-        }
-      } catch {
-        // Some browsers expose geolocation without supporting a permission query.
-      }
-    }
-
     setLocationStatus("prompting");
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -1586,7 +1574,7 @@ function persistWorkabilityAnalysis(
 function locationCopy(status: LocationStatus) {
   if (status === "ready") return "Location enabled. Commute estimates show inside each selected spot.";
   if (status === "prompting") return "Check the browser prompt and choose Allow.";
-  if (status === "blocked") return "Location is blocked for this site. Enable it in Arc site controls, then try again.";
+  if (status === "blocked") return "Location is blocked for this site. Allow it in your browser's site settings, then try again.";
   if (status === "timeout") return "The browser did not return a location. Check location services and try again.";
   if (status === "unavailable") return "Your current location is unavailable.";
   if (status === "unsupported") return "This browser does not support location access.";
