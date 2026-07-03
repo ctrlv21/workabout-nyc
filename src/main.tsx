@@ -21,17 +21,17 @@ import {
 import { fetchStoredWorkability, submitCommunityRating } from "./supabase";
 
 const OVERVIEW = {
-  center: [-73.976, 40.739] as [number, number],
-  zoom: 12.8,
-  pitch: 62,
-  bearing: -28,
+  center: [-73.979, 40.7415] as [number, number],
+  zoom: 13.65,
+  pitch: 71,
+  bearing: -34,
 };
 
 const INTRO_VIEW = {
-  center: [-73.976, 40.739] as [number, number],
-  zoom: 11.7,
-  pitch: 55,
-  bearing: -30,
+  center: [-73.979, 40.7415] as [number, number],
+  zoom: 12.7,
+  pitch: 64,
+  bearing: -31,
 };
 
 const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v2";
