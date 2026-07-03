@@ -94,7 +94,7 @@ function App() {
   const [menuInsights, setMenuInsights] = useState<Record<string, MenuInsights>>({});
   const [menuStatus, setMenuStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [communityProfiles, setCommunityProfiles] = useState<Record<string, WorkFeedback>>(readCommunityProfiles);
-  const [timeTheme, setTimeTheme] = useState<TimeTheme>(getNYCTimeTheme);
+  const [timeTheme, setTimeTheme] = useState<TimeTheme>(getInitialTimeTheme);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
@@ -238,13 +238,14 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = timeTheme;
     const url = new URL(window.location.href);
-    if (url.searchParams.has("theme")) {
+    if (url.searchParams.has("theme") && !isDemoMode()) {
       url.searchParams.delete("theme");
       window.history.replaceState(null, "", url);
     }
   }, [timeTheme]);
 
   useEffect(() => {
+    if (getDemoTimeTheme()) return;
     const timer = window.setInterval(() => setTimeTheme(getNYCTimeTheme()), 60000);
     return () => window.clearInterval(timer);
   }, []);
@@ -264,6 +265,7 @@ function App() {
     mapboxgl.accessToken = token!;
     const compactMap = window.matchMedia("(max-width: 700px)").matches;
     const safari = isSafariBrowser();
+    const initialCamera = isDemoMode() ? OVERVIEW : INTRO_VIEW;
     let map: Map;
     try {
       map = new mapboxgl.Map({
@@ -281,10 +283,10 @@ function App() {
             densityPointOfInterestLabels: 1,
           },
         },
-        center: INTRO_VIEW.center,
-        zoom: INTRO_VIEW.zoom,
-        pitch: INTRO_VIEW.pitch,
-        bearing: INTRO_VIEW.bearing,
+        center: initialCamera.center,
+        zoom: initialCamera.zoom,
+        pitch: initialCamera.pitch,
+        bearing: initialCamera.bearing,
         antialias: !compactMap && !safari,
         fadeDuration: compactMap || safari ? 0 : 300,
         dragRotate: true,
@@ -696,6 +698,7 @@ function App() {
   }
 
   function showOverview() {
+    introPlayedRef.current = true;
     setActiveCafe(null);
     setFocusedArea(null);
     setPanelOpen(false);
@@ -764,6 +767,7 @@ function App() {
   }
 
   function flyToNeighborhood(place: (typeof NEIGHBORHOODS)[number]) {
+    introPlayedRef.current = true;
     setActiveCafe(null);
     selectedCafeKeyRef.current = null;
     setFocusedArea(place.label);
@@ -805,11 +809,22 @@ function App() {
     setPanelOpen(true);
   }
 
+  useEffect(() => {
+    if (!isDemoMode()) return;
+    const demoCafe = CAFES.find((cafe) => cafe.n === "Devocion");
+    if (!demoCafe) return;
+    const handleDemoKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "d") openCafe(demoCafe);
+    };
+    window.addEventListener("keydown", handleDemoKey);
+    return () => window.removeEventListener("keydown", handleDemoKey);
+  }, []);
+
   const commute = activeCafe && userLocation ? getCommute(activeCafe, userLocation) : null;
 
   return (
     <>
-      <Splash done={splashDone && (mapReady || !hasToken)} />
+      <Splash done={splashDone && (mapReady || !hasToken || isDemoMode())} />
       <main className="app">
         <section className={`map-stage ${focusedArea ? "focused" : ""} ${activeCafe ? "cafe-focused" : ""}`} aria-label="Interactive 3D NYC cafe map">
           <div className={`map-shell ${mapReady ? "ready" : ""}`}>
@@ -1764,6 +1779,23 @@ function getNYCTimeTheme(): TimeTheme {
   if (hour >= 8 && hour < 17) return "day";
   if (hour >= 17 && hour < 20) return "dusk";
   return "night";
+}
+
+function getDemoTimeTheme(): TimeTheme | null {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("demo") !== "1") return null;
+  const requested = params.get("theme");
+  return requested === "dawn" || requested === "day" || requested === "dusk" || requested === "night"
+    ? requested
+    : null;
+}
+
+function getInitialTimeTheme(): TimeTheme {
+  return getDemoTimeTheme() ?? getNYCTimeTheme();
+}
+
+function isDemoMode() {
+  return new URLSearchParams(window.location.search).get("demo") === "1";
 }
 
 function isSafariBrowser() {

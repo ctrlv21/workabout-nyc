@@ -1,5 +1,6 @@
 node_modules/
 dist/
+testreel-output/
 .env
 .env.*
 !.env.example

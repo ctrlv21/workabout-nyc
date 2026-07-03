@@ -1,0 +1,106 @@
+{
+  "url": "http://127.0.0.1:5177/?view=overview&demo=1&theme=dusk&map=3d",
+  "viewport": {
+    "width": 1720,
+    "height": 968
+  },
+  "outputSize": {
+    "width": 1920,
+    "height": 1080
+  },
+  "colorScheme": "dark",
+  "outputFormat": "mp4",
+  "speed": 0.92,
+  "waitForSelector": ".map-stage",
+  "cursor": {
+    "enabled": true,
+    "style": "default",
+    "size": 34,
+    "color": "#f7f1e8",
+    "rippleColor": "rgba(246, 203, 173, 0.42)",
+    "rippleSize": 64,
+    "idleHide": true,
+    "idleHideMs": 1800,
+    "fadeMs": 240
+  },
+  "chrome": {
+    "enabled": true,
+    "titleBarHeight": 34,
+    "titleBarColor": "#151515",
+    "trafficLights": true,
+    "url": "workaboutnyc.vercel.app"
+  },
+  "background": {
+    "enabled": true,
+    "color": "#090909",
+    "padding": 34,
+    "borderRadius": 8
+  },
+  "steps": [
+    {
+      "action": "wait",
+      "ms": 2400
+    },
+    {
+      "action": "hideCursor"
+    },
+    {
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "action": "showCursor"
+    },
+    {
+      "action": "click",
+      "selector": ".area-trigger",
+      "timeout": 12000,
+      "pauseAfter": 700
+    },
+    {
+      "action": "click",
+      "selector": "role=button[name='Williamsburg']",
+      "timeout": 12000,
+      "pauseAfter": 2500
+    },
+    {
+      "action": "hideCursor"
+    },
+    {
+      "action": "keyboard",
+      "key": "d",
+      "pauseAfter": 3200
+    },
+    {
+      "action": "showCursor"
+    },
+    {
+      "action": "click",
+      "selector": ".drawer-close",
+      "pauseAfter": 1100
+    },
+    {
+      "action": "click",
+      "selector": ".filter-toggle",
+      "pauseAfter": 700
+    },
+    {
+      "action": "click",
+      "selector": ".filter-fast-wifi",
+      "pauseAfter": 1800
+    },
+    {
+      "action": "click",
+      "selector": ".overview-link",
+      "timeout": 12000,
+      "pauseAfter": 2600
+    },
+    {
+      "action": "hideCursor"
+    },
+    {
+      "action": "wait",
+      "ms": 3200
+    }
+  ]
+}
