@@ -1972,8 +1972,9 @@ h1 em {
   padding: 11px 13px;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--ink) 12%, transparent),
-    0 14px 38px rgba(0, 0, 0, 0.48);
+    0 14px 38px color-mix(in srgb, var(--bg) 48%, transparent);
   backdrop-filter: blur(22px) saturate(125%);
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
 }
 
 .selected-place-popup .mapboxgl-popup-tip {
@@ -2047,11 +2048,14 @@ h1 em {
 .mapboxgl-popup-content {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(17, 17, 17, 0.94);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.62);
+  background: var(--panel-strong);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--ink) 9%, transparent),
+    0 16px 42px color-mix(in srgb, var(--bg) 44%, transparent);
   color: var(--ink);
   padding: 13px 15px;
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
 }
 
 .pop-photo {
@@ -2065,19 +2069,19 @@ h1 em {
 }
 
 .mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
-  border-bottom-color: rgba(17, 17, 17, 0.94);
+  border-bottom-color: var(--panel-strong);
 }
 
 .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
-  border-top-color: rgba(17, 17, 17, 0.94);
+  border-top-color: var(--panel-strong);
 }
 
 .mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
-  border-right-color: rgba(17, 17, 17, 0.94);
+  border-right-color: var(--panel-strong);
 }
 
 .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
-  border-left-color: rgba(17, 17, 17, 0.94);
+  border-left-color: var(--panel-strong);
 }
 
 .pop .pn {
