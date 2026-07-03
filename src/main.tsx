@@ -36,7 +36,7 @@ const INTRO_VIEW = {
   bearing: -31,
 };
 
-const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v2";
+const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v3";
 
 const NEIGHBORHOODS = [
   { label: "Midtown", borough: "Manhattan", center: [-73.9857, 40.7484] as [number, number], zoom: 15.9, pitch: 73, bearing: -38 },
@@ -210,11 +210,14 @@ function App() {
   useEffect(() => {
     const controller = new AbortController();
     const cached = window.localStorage.getItem(CAFE_DISCOVERY_CACHE_KEY);
+    let cachedPlaces: GoogleCafeSummary[] = [];
     if (cached) {
       try {
-        const places = JSON.parse(cached) as GoogleCafeSummary[];
-        setDiscoveredCafes(toUniqueDiscoveredCafes(places));
-        return () => controller.abort();
+        const parsed = JSON.parse(cached) as {
+          places?: GoogleCafeSummary[];
+        };
+        cachedPlaces = Array.isArray(parsed.places) ? parsed.places : [];
+        if (cachedPlaces.length) setDiscoveredCafes(toUniqueDiscoveredCafes(cachedPlaces));
       } catch {
         window.localStorage.removeItem(CAFE_DISCOVERY_CACHE_KEY);
       }
@@ -226,8 +229,14 @@ function App() {
         return (await response.json()) as GoogleCafeSummary[];
       })
       .then((places) => {
-        window.localStorage.setItem(CAFE_DISCOVERY_CACHE_KEY, JSON.stringify(places));
-        setDiscoveredCafes(toUniqueDiscoveredCafes(places));
+        const nextPlaces = cachedPlaces.length > 0 && places.length < cachedPlaces.length * 0.75
+          ? cachedPlaces
+          : places;
+        window.localStorage.setItem(CAFE_DISCOVERY_CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          places: nextPlaces,
+        }));
+        setDiscoveredCafes(toUniqueDiscoveredCafes(nextPlaces));
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) console.error(error);
