@@ -37,6 +37,7 @@ const INTRO_VIEW = {
 };
 
 const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v3";
+const USER_LOCATION_SESSION_KEY = "workabout-nyc-user-location";
 
 const NEIGHBORHOODS = [
   { label: "Midtown", borough: "Manhattan", center: [-73.9857, 40.7484] as [number, number], zoom: 15.9, pitch: 73, bearing: -38 },
@@ -95,8 +96,10 @@ function App() {
   const [menuStatus, setMenuStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [communityProfiles, setCommunityProfiles] = useState<Record<string, WorkFeedback>>(readCommunityProfiles);
   const [timeTheme, setTimeTheme] = useState<TimeTheme>(getInitialTimeTheme);
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
-  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(readSessionLocation);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>(() =>
+    readSessionLocation() ? "ready" : "idle",
+  );
   const [shareStatus, setShareStatus] = useState<"idle" | "copied">("idle");
   const mapRef = useRef<Map | null>(null);
   const markersRef = useRef<MarkerRecord[]>([]);
@@ -724,6 +727,7 @@ function App() {
   }
 
   async function requestLocation() {
+    if (locationStatus === "prompting") return;
     if (!navigator.geolocation) {
       setLocationStatus("unsupported");
       return;
@@ -732,10 +736,12 @@ function App() {
     setLocationStatus("prompting");
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
+        const nextLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
+        };
+        setUserLocation(nextLocation);
+        writeSessionLocation(nextLocation);
         setLocationStatus("ready");
       },
       (error) => {
@@ -752,7 +758,9 @@ function App() {
   function useMapCenterLocation() {
     const center = mapRef.current?.getCenter();
     if (!center) return;
-    setUserLocation({ lat: center.lat, lng: center.lng });
+    const nextLocation = { lat: center.lat, lng: center.lng };
+    setUserLocation(nextLocation);
+    writeSessionLocation(nextLocation);
     setLocationStatus("ready");
   }
 
@@ -855,7 +863,7 @@ function App() {
                   Browse spots
                 </button>
                 <button className="ghost-action" onClick={requestLocation} type="button">
-                  {locationStatus === "prompting" ? "Locating..." : "Use my location"}
+                  {locationButtonCopy(locationStatus)}
                 </button>
               </div>
               {locationStatus !== "idle" && (
@@ -1385,7 +1393,7 @@ function DetailView({
             <strong>Estimate from your location</strong>
             <span>{locationCopy(locationStatus)}</span>
             <button className="mini-action" onClick={onRequestLocation} type="button">
-              {locationStatus === "prompting" ? "Waiting..." : "Use my location"}
+              {locationButtonCopy(locationStatus)}
             </button>
           </>
         )}
@@ -1610,6 +1618,34 @@ function locationCopy(status: LocationStatus) {
   if (status === "unavailable") return "Your current location is unavailable.";
   if (status === "unsupported") return "This browser does not support location access.";
   return "Optional. Used only for local commute estimates after browser approval.";
+}
+
+function locationButtonCopy(status: LocationStatus) {
+  if (status === "prompting") return "Locating...";
+  if (status === "ready") return "Location on";
+  if (status === "blocked" || status === "timeout" || status === "unavailable") return "Try location again";
+  return "Use my location";
+}
+
+function readSessionLocation(): UserLocation | null {
+  try {
+    const stored = window.sessionStorage.getItem(USER_LOCATION_SESSION_KEY);
+    if (!stored) return null;
+    const location = JSON.parse(stored) as Partial<UserLocation>;
+    return typeof location.lat === "number" && typeof location.lng === "number"
+      ? { lat: location.lat, lng: location.lng }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionLocation(location: UserLocation) {
+  try {
+    window.sessionStorage.setItem(USER_LOCATION_SESSION_KEY, JSON.stringify(location));
+  } catch {
+    // Location still works when session storage is unavailable.
+  }
 }
 
 function getCommute(cafe: Cafe, location: UserLocation) {
