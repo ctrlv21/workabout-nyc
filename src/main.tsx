@@ -920,7 +920,7 @@ function App() {
         </section>
 
         <aside className={`spot-drawer ${panelOpen ? "open" : ""}`} aria-label="Selected cafe details">
-          <div className="drawer-toolbar">
+          <div className={`drawer-toolbar ${activeCafe ? "" : "list-only"}`}>
             {activeCafe ? (
               <button className="back" onClick={() => setActiveCafe(null)} type="button">
                 <span aria-hidden="true">←</span> All spots

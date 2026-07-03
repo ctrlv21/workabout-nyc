@@ -1212,6 +1212,31 @@ h1 em {
   backdrop-filter: blur(24px) saturate(135%);
 }
 
+.drawer-toolbar.list-only {
+  height: 0;
+  min-height: 0;
+  overflow: visible;
+  border-bottom: 0;
+  background: transparent;
+  padding: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.drawer-toolbar.list-only .drawer-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.drawer-toolbar.list-only + .drawer-list {
+  padding-top: 18px;
+}
+
+.drawer-toolbar.list-only + .drawer-list h2 {
+  padding-right: 52px;
+}
+
 .drawer-close {
   display: grid;
   width: 36px;
