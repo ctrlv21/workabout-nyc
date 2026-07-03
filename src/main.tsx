@@ -731,7 +731,9 @@ function App() {
         else if (error.code === error.TIMEOUT) setLocationStatus("timeout");
         else setLocationStatus("unavailable");
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+      // Neighborhood-level commute estimates do not need a fresh GPS fix.
+      // Safari is substantially more reliable when it can use Wi-Fi or a recent position.
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 30000 },
     );
   }
 
@@ -835,10 +837,15 @@ function App() {
               {locationStatus !== "idle" && (
                 <div className="location-feedback">
                   <p className="location-note">{locationCopy(locationStatus)}</p>
-                  {locationStatus === "blocked" && (
-                    <button className="location-fallback" onClick={useMapCenterLocation} type="button">
-                      Use map center instead
-                    </button>
+                  {(locationStatus === "blocked" || locationStatus === "timeout" || locationStatus === "unavailable") && (
+                    <div className="location-recovery">
+                      <button className="location-fallback" onClick={requestLocation} type="button">
+                        Try again
+                      </button>
+                      <button className="location-fallback" onClick={useMapCenterLocation} type="button">
+                        Use map center instead
+                      </button>
+                    </div>
                   )}
                   {bestNearby && (
                     <button className="nearby-pick" onClick={() => openCafe(bestNearby)} type="button">
@@ -1574,7 +1581,7 @@ function persistWorkabilityAnalysis(
 function locationCopy(status: LocationStatus) {
   if (status === "ready") return "Location enabled. Commute estimates show inside each selected spot.";
   if (status === "prompting") return "Check the browser prompt and choose Allow.";
-  if (status === "blocked") return "Location is blocked for this site. Allow it in your browser's site settings, then try again.";
+  if (status === "blocked") return "Safari could not access your location. Set Location to Allow, close site settings, then try again.";
   if (status === "timeout") return "The browser did not return a location. Check location services and try again.";
   if (status === "unavailable") return "Your current location is unavailable.";
   if (status === "unsupported") return "This browser does not support location access.";

@@ -479,6 +479,12 @@ h1 em {
   gap: 7px;
 }
 
+.location-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
 .location-fallback {
   width: fit-content;
   border: 0;
