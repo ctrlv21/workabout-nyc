@@ -115,6 +115,9 @@ export default defineConfig(({ mode }) => {
     : "";
   const ogImage = siteUrl ? `${siteUrl.replace(/\/$/, "")}/og-workabout.png` : "/og-workabout.png";
   return {
+    build: {
+      target: "es2019",
+    },
     plugins: [
       react(),
       {

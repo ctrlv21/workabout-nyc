@@ -80,6 +80,7 @@ function App() {
   const [activeCafe, setActiveCafe] = useState<Cafe | null>(null);
   const [splashDone, setSplashDone] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(Boolean(INITIAL_SHARE_STATE.cafe));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [focusedArea, setFocusedArea] = useState<string | null>(INITIAL_SHARE_STATE.area);
@@ -297,37 +298,51 @@ function App() {
   useEffect(() => {
     if (!hasToken || !mapNodeRef.current || mapRef.current) return;
 
+    if (!mapboxgl.supported()) {
+      setMapError("This browser cannot start the 3D map. Enable WebGL or hardware acceleration, then reload.");
+      setMapReady(true);
+      return;
+    }
+
     mapboxgl.accessToken = token!;
     const compactMap = window.matchMedia("(max-width: 700px)").matches;
-    const map = new mapboxgl.Map({
-      container: mapNodeRef.current,
-      style: "mapbox://styles/mapbox/standard",
-      config: {
-        basemap: {
-          lightPreset: timeTheme,
-          show3dObjects: true,
-          show3dFacades: true,
-          showLandmarkIcons: false,
-          showPointOfInterestLabels: false,
-          showRoadLabels: true,
-          showTransitLabels: true,
-          densityPointOfInterestLabels: 1,
+    let map: Map;
+    try {
+      map = new mapboxgl.Map({
+        container: mapNodeRef.current,
+        style: "mapbox://styles/mapbox/standard",
+        config: {
+          basemap: {
+            lightPreset: timeTheme,
+            show3dObjects: true,
+            show3dFacades: true,
+            showLandmarkIcons: false,
+            showPointOfInterestLabels: false,
+            showRoadLabels: true,
+            showTransitLabels: true,
+            densityPointOfInterestLabels: 1,
+          },
         },
-      },
-      center: INTRO_VIEW.center,
-      zoom: INTRO_VIEW.zoom,
-      pitch: INTRO_VIEW.pitch,
-      bearing: INTRO_VIEW.bearing,
-      antialias: !compactMap,
-      fadeDuration: compactMap ? 0 : 300,
-      dragRotate: true,
-      touchPitch: true,
-      maxZoom: 19.2,
-      maxBounds: [
-        [-74.18, 40.55],
-        [-73.72, 40.92],
-      ],
-    });
+        center: INTRO_VIEW.center,
+        zoom: INTRO_VIEW.zoom,
+        pitch: INTRO_VIEW.pitch,
+        bearing: INTRO_VIEW.bearing,
+        antialias: !compactMap,
+        fadeDuration: compactMap ? 0 : 300,
+        dragRotate: true,
+        touchPitch: true,
+        maxZoom: 19.2,
+        maxBounds: [
+          [-74.18, 40.55],
+          [-73.72, 40.92],
+        ],
+      });
+    } catch (error) {
+      console.error(error);
+      setMapError("The 3D map could not start. Check browser graphics permissions and reload.");
+      setMapReady(true);
+      return;
+    }
 
     map.scrollZoom.enable();
     map.scrollZoom.setZoomRate(1 / 140);
@@ -849,6 +864,7 @@ function App() {
             <div className={`map-scan ${splashDone ? "play" : ""}`} />
           </div>
           {!hasToken && <TokenWarning />}
+          {mapError && <MapFailure message={mapError} />}
 
           <div className="top-hud">
             <div className="brand-panel">
@@ -1488,6 +1504,16 @@ function TokenWarning() {
       <p>
         Add a <code>VITE_MAPBOX_TOKEN</code> value in <code>.env.local</code> locally and in Vercel Project Settings.
       </p>
+    </div>
+  );
+}
+
+function MapFailure({ message }: { message: string }) {
+  return (
+    <div className="tokenwarn" role="alert">
+      <h2>Workabout NYC</h2>
+      <p>{message}</p>
+      <p>Try the latest Chrome, Safari, Firefox, or Edge without strict graphics blocking.</p>
     </div>
   );
 }
