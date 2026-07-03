@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import mapboxgl, { Map, Marker, Popup } from "mapbox-gl";
 import "@fontsource-variable/fraunces";
 import "mapbox-gl/dist/mapbox-gl.css";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import "./styles.css";
 import type { GoogleCafeSummary, GooglePlace } from "../server/googlePlaces";
 import type { WorkabilityAnalysis } from "../server/workability";
@@ -22,8 +24,8 @@ import { fetchStoredWorkability, submitCommunityRating } from "./supabase";
 
 const OVERVIEW = {
   center: [-73.979, 40.7415] as [number, number],
-  zoom: 13.65,
-  pitch: 71,
+  zoom: 14.1,
+  pitch: 74,
   bearing: -34,
 };
 
@@ -80,7 +82,7 @@ function App() {
   const [activeCafe, setActiveCafe] = useState<Cafe | null>(null);
   const [splashDone, setSplashDone] = useState(false);
   const [mapReady, setMapReady] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapMode, setMapMode] = useState<"3d" | "2d">(shouldUse2DFallback);
   const [panelOpen, setPanelOpen] = useState(Boolean(INITIAL_SHARE_STATE.cafe));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [focusedArea, setFocusedArea] = useState<string | null>(INITIAL_SHARE_STATE.area);
@@ -91,7 +93,6 @@ function App() {
   const [workabilityStatus, setWorkabilityStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [menuInsights, setMenuInsights] = useState<Record<string, MenuInsights>>({});
   const [menuStatus, setMenuStatus] = useState<"idle" | "loading" | "ready">("idle");
-  const [backgroundAnalysis, setBackgroundAnalysis] = useState({ complete: 0, total: 0 });
   const [communityProfiles, setCommunityProfiles] = useState<Record<string, WorkFeedback>>(readCommunityProfiles);
   const [timeTheme, setTimeTheme] = useState<TimeTheme>(getNYCTimeTheme);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -176,8 +177,7 @@ function App() {
     if (discoveredCafes.length === 0) return;
     let cancelled = false;
 
-    async function hydrateAndAnalyze() {
-      const local = readWorkabilityAnalyses();
+    async function hydrateAnalyses() {
       try {
         const stored = await fetchStoredWorkability(
           discoveredCafes.flatMap((cafe) => cafe.placeId ? [cafe.placeId] : []),
@@ -191,58 +191,12 @@ function App() {
           });
           return next;
         });
-
-        stored.forEach((analysis, placeId) => {
-          const cafe = discoveredCafes.find((item) => item.placeId === placeId);
-          if (cafe) local[cafeKey(cafe)] = analysis;
-        });
       } catch (error) {
         console.error("Shared score cache unavailable", error);
       }
-
-      const pending = discoveredCafes.filter((cafe) => !local[cafeKey(cafe)]);
-      if (pending.length === 0 || cancelled) return;
-      let cursor = 0;
-      let complete = 0;
-      setBackgroundAnalysis({ complete: 0, total: pending.length });
-
-      async function analyzeNext() {
-        while (!cancelled) {
-          const cafe = pending[cursor++];
-          if (!cafe) return;
-          try {
-            const query = new URLSearchParams({
-              name: cafe.n,
-              lat: String(cafe.lat),
-              lng: String(cafe.lng),
-            });
-            const placeResponse = await fetch(`/api/place?${query}`);
-            if (!placeResponse.ok) throw new Error("Place lookup failed");
-            const place = (await placeResponse.json()) as GooglePlace;
-            const analysisResponse = await fetch("/api/workability", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(place),
-            });
-            if (!analysisResponse.ok) throw new Error("Workability analysis failed");
-            const analysis = (await analysisResponse.json()) as WorkabilityAnalysis;
-            if (!cancelled) {
-              setWorkability((current) => persistWorkabilityAnalysis(current, cafeKey(cafe), analysis));
-            }
-          } catch (error) {
-            console.error(`Background analysis failed for ${cafe.n}`, error);
-          } finally {
-            complete += 1;
-            if (!cancelled) setBackgroundAnalysis({ complete, total: pending.length });
-          }
-        }
-      }
-
-      const workers = window.matchMedia("(max-width: 700px)").matches ? 1 : 2;
-      await Promise.all(Array.from({ length: workers }, () => analyzeNext()));
     }
 
-    void hydrateAndAnalyze();
+    void hydrateAnalyses();
     return () => {
       cancelled = true;
     };
@@ -296,16 +250,20 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (mapMode === "2d") {
+      setMapReady(true);
+      return;
+    }
     if (!hasToken || !mapNodeRef.current || mapRef.current) return;
 
     if (!mapboxgl.supported()) {
-      setMapError("This browser cannot start the 3D map. Enable WebGL or hardware acceleration, then reload.");
-      setMapReady(true);
+      setMapMode("2d");
       return;
     }
 
     mapboxgl.accessToken = token!;
     const compactMap = window.matchMedia("(max-width: 700px)").matches;
+    const safari = isSafariBrowser();
     let map: Map;
     try {
       map = new mapboxgl.Map({
@@ -327,8 +285,8 @@ function App() {
         zoom: INTRO_VIEW.zoom,
         pitch: INTRO_VIEW.pitch,
         bearing: INTRO_VIEW.bearing,
-        antialias: !compactMap,
-        fadeDuration: compactMap ? 0 : 300,
+        antialias: !compactMap && !safari,
+        fadeDuration: compactMap || safari ? 0 : 300,
         dragRotate: true,
         touchPitch: true,
         maxZoom: 19.2,
@@ -339,10 +297,15 @@ function App() {
       });
     } catch (error) {
       console.error(error);
-      setMapError("The 3D map could not start. Check browser graphics permissions and reload.");
-      setMapReady(true);
+      setMapMode("2d");
       return;
     }
+
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setMapMode("2d");
+    };
+    map.getCanvas().addEventListener("webglcontextlost", handleContextLost);
 
     map.scrollZoom.enable();
     map.scrollZoom.setZoomRate(1 / 140);
@@ -470,12 +433,13 @@ function App() {
       if (hoverHideTimer) window.clearTimeout(hoverHideTimer);
       selectedPopupRef.current?.remove();
       selectedPopupRef.current = null;
+      map.getCanvas().removeEventListener("webglcontextlost", handleContextLost);
       markersRef.current.forEach(({ marker }) => marker.remove());
       markersRef.current = [];
       map.remove();
       mapRef.current = null;
     };
-  }, [hasToken, timeTheme, token]);
+  }, [hasToken, mapMode, timeTheme, token]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -859,12 +823,15 @@ function App() {
       <main className="app">
         <section className={`map-stage ${focusedArea ? "focused" : ""} ${activeCafe ? "cafe-focused" : ""}`} aria-label="Interactive 3D NYC cafe map">
           <div className={`map-shell ${mapReady ? "ready" : ""}`}>
-            <div ref={mapNodeRef} id="map" />
+            {mapMode === "3d" ? (
+              <div ref={mapNodeRef} id="map" />
+            ) : (
+              <FallbackMap cafes={browsableCafes} onOpen={openCafe} />
+            )}
             <div className="map-vignette" />
             <div className={`map-scan ${splashDone ? "play" : ""}`} />
           </div>
           {!hasToken && <TokenWarning />}
-          {mapError && <MapFailure message={mapError} />}
 
           <div className="top-hud">
             <div className="brand-panel">
@@ -898,7 +865,6 @@ function App() {
               <NeighborhoodDock activeArea={focusedArea} onFlyTo={flyToNeighborhood} onOverview={showOverview} />
               <CameraDock
                 timeTheme={timeTheme}
-                backgroundAnalysis={backgroundAnalysis}
                 onShare={shareCurrentView}
                 shareStatus={shareStatus}
               />
@@ -963,19 +929,15 @@ function App() {
 
 function CameraDock({
   timeTheme,
-  backgroundAnalysis,
   onShare,
   shareStatus,
 }: {
   timeTheme: TimeTheme;
-  backgroundAnalysis: { complete: number; total: number };
   onShare: () => void;
   shareStatus: "idle" | "copied";
 }) {
-  const isAnalyzing = backgroundAnalysis.total > 0 && backgroundAnalysis.complete < backgroundAnalysis.total;
   return (
     <div className="camera-dock" aria-label="Map camera controls">
-      {isAnalyzing && <span>Claude scoring {backgroundAnalysis.complete}/{backgroundAnalysis.total}</span>}
       <span
         className="time-indicator"
         data-period={timeTheme}
@@ -987,6 +949,75 @@ function CameraDock({
       <button className="share-control" onClick={onShare} type="button" aria-label="Share this map view">
         <i className="share-glyph" aria-hidden="true">{shareStatus === "copied" ? "✓" : "↗"}</i>
       </button>
+    </div>
+  );
+}
+
+function FallbackMap({ cafes, onOpen }: { cafes: Cafe[]; onOpen: (cafe: Cafe) => void }) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+
+  useEffect(() => {
+    if (!nodeRef.current || mapRef.current) return;
+    const map = L.map(nodeRef.current, {
+      attributionControl: true,
+      preferCanvas: false,
+      zoomControl: false,
+    }).setView([40.739, -73.976], 12);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+      maxZoom: 19,
+    }).addTo(map);
+    markerLayerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    window.setTimeout(() => map.invalidateSize(), 0);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerLayerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = markerLayerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    const bounds: L.LatLngExpression[] = [];
+
+    cafes.forEach((cafe) => {
+      const score = cafe.work > 0 ? cafe.work.toFixed(1) : "·";
+      const icon = L.divIcon({
+        className: "fallback-marker-wrap",
+        html: `<span class="fallback-marker">${score}</span>`,
+        iconAnchor: [18, 18],
+        iconSize: [36, 36],
+      });
+      const marker = L.marker([cafe.lat, cafe.lng], { icon })
+        .bindTooltip(cafe.n, { direction: "top", offset: [0, -16] })
+        .on("click", () => onOpenRef.current(cafe));
+      marker.addTo(layer);
+      bounds.push([cafe.lat, cafe.lng]);
+    });
+
+    if (bounds.length) {
+      map.fitBounds(L.latLngBounds(bounds), {
+        animate: false,
+        maxZoom: 15,
+        padding: [70, 70],
+      });
+    }
+  }, [cafes]);
+
+  return (
+    <div className="fallback-map-shell">
+      <div ref={nodeRef} className="fallback-map" aria-label="2D compatibility cafe map" />
+      <span className="fallback-badge">2D compatibility map</span>
     </div>
   );
 }
@@ -1508,16 +1539,6 @@ function TokenWarning() {
   );
 }
 
-function MapFailure({ message }: { message: string }) {
-  return (
-    <div className="tokenwarn" role="alert">
-      <h2>Workabout NYC</h2>
-      <p>{message}</p>
-      <p>Try the latest Chrome, Safari, Firefox, or Edge without strict graphics blocking.</p>
-    </div>
-  );
-}
-
 function readCommunityProfiles(): Record<string, WorkFeedback> {
   try {
     const current = window.localStorage.getItem("workabout-nyc-community-profiles");
@@ -1748,6 +1769,21 @@ function getNYCTimeTheme(): TimeTheme {
   if (hour >= 8 && hour < 17) return "day";
   if (hour >= 17 && hour < 20) return "dusk";
   return "night";
+}
+
+function isSafariBrowser() {
+  const agent = window.navigator.userAgent;
+  return /Safari/i.test(agent) && !/Chrome|Chromium|CriOS|Edg|OPR|Android/i.test(agent);
+}
+
+function shouldUse2DFallback(): "3d" | "2d" {
+  const requested = new URLSearchParams(window.location.search).get("map");
+  if (requested === "2d") return "2d";
+  if (!mapboxgl.supported()) return "2d";
+  if (requested === "3d") return "3d";
+  if (!isSafariBrowser()) return "3d";
+  const version = window.navigator.userAgent.match(/Version\/(\d+)/i);
+  return version && Number(version[1]) < 17 ? "2d" : "3d";
 }
 
 function readShareState() {
