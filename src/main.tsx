@@ -21,17 +21,17 @@ import {
 import { fetchStoredWorkability, submitCommunityRating } from "./supabase";
 
 const OVERVIEW = {
-  center: [-73.9859, 40.7481] as [number, number],
-  zoom: 15.15,
-  pitch: 74,
-  bearing: -36,
+  center: [-73.976, 40.739] as [number, number],
+  zoom: 12.8,
+  pitch: 62,
+  bearing: -28,
 };
 
 const INTRO_VIEW = {
-  center: [-73.9857, 40.7484] as [number, number],
-  zoom: 16.75,
-  pitch: 79,
-  bearing: -42,
+  center: [-73.976, 40.739] as [number, number],
+  zoom: 11.7,
+  pitch: 55,
+  bearing: -30,
 };
 
 const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v2";
@@ -1753,11 +1753,9 @@ function getNYCTimeTheme(): TimeTheme {
 function readShareState() {
   const params = new URLSearchParams(window.location.search);
   const area = params.get("area");
-  const validArea = params.get("view") === "overview"
-    ? null
-    : NEIGHBORHOODS.some((place) => place.label === area)
-      ? area
-      : "Midtown";
+  const validArea = area && NEIGHBORHOODS.some((place) => place.label === area)
+    ? area
+    : null;
   const tags = (params.get("filters") ?? "")
     .split(",")
     .filter((tag): tag is CafeTag => TAGS.includes(tag as CafeTag));
