@@ -274,7 +274,7 @@ function App() {
     mapboxgl.accessToken = token!;
     const compactMap = window.matchMedia("(max-width: 700px)").matches;
     const safari = isSafariBrowser();
-    const initialCamera = isDemoMode() ? OVERVIEW : INTRO_VIEW;
+    const initialCamera = isDemoMode() && !isDemoIntro() ? OVERVIEW : INTRO_VIEW;
     let map: Map;
     try {
       map = new mapboxgl.Map({
@@ -833,7 +833,7 @@ function App() {
 
   return (
     <>
-      <Splash done={splashDone && (mapReady || !hasToken || isDemoMode())} />
+      <Splash done={splashDone && (mapReady || !hasToken || (isDemoMode() && !isDemoIntro()))} />
       <main className="app">
         <section className={`map-stage ${focusedArea ? "focused" : ""} ${activeCafe ? "cafe-focused" : ""}`} aria-label="Interactive 3D NYC cafe map">
           <div className={`map-shell ${mapReady ? "ready" : ""}`}>
@@ -1805,6 +1805,10 @@ function getInitialTimeTheme(): TimeTheme {
 
 function isDemoMode() {
   return new URLSearchParams(window.location.search).get("demo") === "1";
+}
+
+function isDemoIntro() {
+  return isDemoMode() && new URLSearchParams(window.location.search).get("intro") === "1";
 }
 
 function isSafariBrowser() {
