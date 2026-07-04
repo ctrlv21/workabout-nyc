@@ -38,7 +38,6 @@ const INTRO_VIEW = {
 
 const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v3";
 const USER_LOCATION_SESSION_KEY = "workabout-nyc-user-location";
-const PROVISIONAL_WORK_SCORE = 2.5;
 
 const NEIGHBORHOODS = [
   { label: "Midtown", borough: "Manhattan", center: [-73.9857, 40.7484] as [number, number], zoom: 15.9, pitch: 73, bearing: -38 },
@@ -92,6 +91,7 @@ function App() {
   const [livePlace, setLivePlace] = useState<GooglePlace | null>(null);
   const [livePlaceStatus, setLivePlaceStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [workability, setWorkability] = useState<Record<string, WorkabilityAnalysis>>(readWorkabilityAnalyses);
+  const [analysisCacheStatus, setAnalysisCacheStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [workabilityStatus, setWorkabilityStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [menuInsights, setMenuInsights] = useState<Record<string, MenuInsights>>({});
   const [menuStatus, setMenuStatus] = useState<"idle" | "loading" | "ready">("idle");
@@ -111,6 +111,8 @@ function App() {
   const selectedCafeKeyRef = useRef<string | null>(null);
   const initialCafeRestoredRef = useRef(false);
   const introPlayedRef = useRef(false);
+  const workabilityRef = useRef(workability);
+  const scoringInFlightRef = useRef(new Set<string>());
   const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
   const hasToken = Boolean(token?.startsWith("pk."));
 
@@ -182,6 +184,7 @@ function App() {
     let cancelled = false;
 
     async function hydrateAnalyses() {
+      setAnalysisCacheStatus("loading");
       try {
         const stored = await fetchStoredWorkability(
           discoveredCafes.flatMap((cafe) => cafe.placeId ? [cafe.placeId] : []),
@@ -195,8 +198,10 @@ function App() {
           });
           return next;
         });
+        setAnalysisCacheStatus("ready");
       } catch (error) {
         console.error("Shared score cache unavailable", error);
+        setAnalysisCacheStatus("error");
       }
     }
 
@@ -205,6 +210,57 @@ function App() {
       cancelled = true;
     };
   }, [discoveredCafes]);
+
+  useEffect(() => {
+    workabilityRef.current = workability;
+  }, [workability]);
+
+  useEffect(() => {
+    if (analysisCacheStatus !== "ready" || discoveredCafes.length === 0) return;
+    const controller = new AbortController();
+
+    async function scoreMissingCafes() {
+      const missing = discoveredCafes.filter((cafe) =>
+        cafe.placeId &&
+        !workabilityRef.current[cafeKey(cafe)] &&
+        !scoringInFlightRef.current.has(cafeKey(cafe)),
+      );
+
+      for (const cafe of missing) {
+        if (controller.signal.aborted) return;
+        const key = cafeKey(cafe);
+        scoringInFlightRef.current.add(key);
+        try {
+          const query = new URLSearchParams({
+            name: cafe.n,
+            lat: String(cafe.lat),
+            lng: String(cafe.lng),
+          });
+          const placeResponse = await fetch(`/api/place?${query}`, { signal: controller.signal });
+          if (!placeResponse.ok) throw new Error("Place lookup failed");
+          const place = (await placeResponse.json()) as GooglePlace;
+          const analysisResponse = await fetch("/api/workability", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(place),
+            signal: controller.signal,
+          });
+          if (!analysisResponse.ok) throw new Error("Workability analysis failed");
+          const analysis = (await analysisResponse.json()) as WorkabilityAnalysis;
+          setWorkability((current) => persistWorkabilityAnalysis(current, key, analysis));
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            console.error(`Automatic scoring failed for ${cafe.n}`, error);
+          }
+        } finally {
+          scoringInFlightRef.current.delete(key);
+        }
+      }
+    }
+
+    void scoreMissingCafes();
+    return () => controller.abort();
+  }, [analysisCacheStatus, discoveredCafes]);
 
   useEffect(() => {
     const fallback = window.setTimeout(() => setMapReady(true), 5600);
@@ -489,8 +545,8 @@ function App() {
       element.disabled = !matches || !inFocusedArea;
       element.tabIndex = matches && inFocusedArea ? 0 : -1;
       element.setAttribute("aria-disabled", String(!matches || !inFocusedArea));
-      const savedScore = readWorkabilityAnalyses()[cafeKey(cafe)]?.score ?? cafe.work;
-      element.innerHTML = `<span class="pin"><span>${savedScore.toFixed(1)}</span></span>`;
+      const savedScore = readWorkabilityAnalyses()[cafeKey(cafe)]?.score;
+      element.innerHTML = `<span class="pin"><span>${savedScore ? savedScore.toFixed(1) : ""}</span></span>`;
       element.addEventListener("mouseenter", () => {
         if (selectedCafeKeyRef.current === cafeKey(cafe)) return;
         popup
@@ -557,10 +613,10 @@ function App() {
       element.tabIndex = matches && inFocusedArea ? 0 : -1;
       element.setAttribute("aria-disabled", String(!matches || !inFocusedArea));
       element.classList.toggle("active", Boolean(activeCafe && cafeKey(activeCafe) === cafeKey(cafe)));
-      const score = workability[cafeKey(cafe)]?.score ?? cafe.work;
+      const score = workability[cafeKey(cafe)]?.score;
       if (cafe.profiled === false) {
         const label = element.querySelector(".pin span");
-        if (label) label.textContent = score.toFixed(1);
+        if (label) label.textContent = score ? score.toFixed(1) : "";
       }
     });
   }, [activeCafe, focusedArea, visibleCafes, workability]);
@@ -607,8 +663,13 @@ function App() {
       setWorkabilityStatus("ready");
       return;
     }
+    if (scoringInFlightRef.current.has(key)) {
+      setWorkabilityStatus("loading");
+      return;
+    }
 
     const controller = new AbortController();
+    scoringInFlightRef.current.add(key);
     setWorkabilityStatus("loading");
     fetch("/api/workability", {
       method: "POST",
@@ -628,10 +689,16 @@ function App() {
         if (error instanceof DOMException && error.name === "AbortError") return;
         console.error(error);
         setWorkabilityStatus("error");
+      })
+      .finally(() => {
+        scoringInFlightRef.current.delete(key);
       });
 
-    return () => controller.abort();
-  }, [activeCafe, livePlace]);
+    return () => {
+      controller.abort();
+      scoringInFlightRef.current.delete(key);
+    };
+  }, [activeCafe, livePlace, workability]);
 
   useEffect(() => {
     if (!activeCafe || !livePlace?.website) {
@@ -1183,7 +1250,7 @@ function CafeTray({ cafes, onOpen }: { cafes: Cafe[]; onOpen: (cafe: Cafe) => vo
               {cafe.profiled === false ? "Google discovery" : status.label}
             </span>
             {confidence && <span className={`confidence-badge ${confidence.replaceAll(" ", "-")}`}>{confidence}</span>}
-            <span className="tray-score">{cafe.work.toFixed(1)}</span>
+            <span className="tray-score">{cafe.profiled === false ? "" : cafe.work.toFixed(1)}</span>
             <span className="tray-name">{cafe.n}</span>
             <span className="tray-meta">
               {cafe.address || `${cafe.h} · ${cafe.seatingStyles.slice(0, 2).join(" / ")}`}
@@ -1231,7 +1298,7 @@ function DrawerList({
               </span>
               {getConfidence(cafe) && <span className="hd">{getConfidence(cafe)}</span>}
             </span>
-            <span className="rt">{cafe.work.toFixed(1)}</span>
+            <span className="rt">{cafe.profiled === false ? "" : cafe.work.toFixed(1)}</span>
           </button>
           ))}
         </div>
@@ -1311,7 +1378,7 @@ function DetailView({
             ) : null}
             <div className="ai-score-row">
               <span>Workability analysis</span>
-              <strong>{(workability?.score ?? cafe.work).toFixed(1)} / 5</strong>
+              <strong>{workability ? `${workability.score.toFixed(1)} / 5` : "Analyzing..."}</strong>
             </div>
             <span className="ai-confidence">
               {workabilityStatus === "loading"
@@ -1320,7 +1387,7 @@ function DetailView({
                   ? "Analysis unavailable"
                   : workability
                     ? `${workability.confidence} confidence`
-                    : "Provisional baseline · awaiting evidence"}
+                    : "Queued for automatic analysis"}
             </span>
             {workability && <p>{workability.verdict}</p>}
             {livePlace?.reviewSummary && (
@@ -1680,7 +1747,7 @@ function discoveredPlaceToCafe(place: GoogleCafeSummary): Cafe {
     b: place.borough,
     lng: place.lng,
     lat: place.lat,
-    work: PROVISIONAL_WORK_SCORE,
+    work: 0,
     price: "—",
     coffee: "Live details",
     food: "Live details",
