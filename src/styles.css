@@ -1595,7 +1595,7 @@ h1 em {
   justify-content: space-between;
   border-radius: 7px;
   background: var(--accent-2);
-  color: #050505;
+  color: var(--bg);
   font-size: 14px;
   font-weight: 800;
   padding: 11px 14px;
@@ -1607,7 +1607,7 @@ h1 em {
 }
 
 .maplink:hover {
-  background: #d8d8d4;
+  background: color-mix(in srgb, var(--accent-2) 86%, var(--bg));
 }
 
 .menulink {

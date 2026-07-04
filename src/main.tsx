@@ -38,6 +38,7 @@ const INTRO_VIEW = {
 
 const CAFE_DISCOVERY_CACHE_KEY = "workabout-nyc-cafes-v3";
 const USER_LOCATION_SESSION_KEY = "workabout-nyc-user-location";
+const PROVISIONAL_WORK_SCORE = 2.5;
 
 const NEIGHBORHOODS = [
   { label: "Midtown", borough: "Manhattan", center: [-73.9857, 40.7484] as [number, number], zoom: 15.9, pitch: 73, bearing: -38 },
@@ -488,8 +489,8 @@ function App() {
       element.disabled = !matches || !inFocusedArea;
       element.tabIndex = matches && inFocusedArea ? 0 : -1;
       element.setAttribute("aria-disabled", String(!matches || !inFocusedArea));
-      const savedScore = readWorkabilityAnalyses()[cafeKey(cafe)]?.score;
-      element.innerHTML = `<span class="pin"><span>${savedScore ? savedScore.toFixed(1) : "…"}</span></span>`;
+      const savedScore = readWorkabilityAnalyses()[cafeKey(cafe)]?.score ?? cafe.work;
+      element.innerHTML = `<span class="pin"><span>${savedScore.toFixed(1)}</span></span>`;
       element.addEventListener("mouseenter", () => {
         if (selectedCafeKeyRef.current === cafeKey(cafe)) return;
         popup
@@ -556,10 +557,10 @@ function App() {
       element.tabIndex = matches && inFocusedArea ? 0 : -1;
       element.setAttribute("aria-disabled", String(!matches || !inFocusedArea));
       element.classList.toggle("active", Boolean(activeCafe && cafeKey(activeCafe) === cafeKey(cafe)));
-      const score = workability[cafeKey(cafe)]?.score;
+      const score = workability[cafeKey(cafe)]?.score ?? cafe.work;
       if (cafe.profiled === false) {
         const label = element.querySelector(".pin span");
-        if (label) label.textContent = score ? score.toFixed(1) : "…";
+        if (label) label.textContent = score.toFixed(1);
       }
     });
   }, [activeCafe, focusedArea, visibleCafes, workability]);
@@ -1182,7 +1183,7 @@ function CafeTray({ cafes, onOpen }: { cafes: Cafe[]; onOpen: (cafe: Cafe) => vo
               {cafe.profiled === false ? "Google discovery" : status.label}
             </span>
             {confidence && <span className={`confidence-badge ${confidence.replaceAll(" ", "-")}`}>{confidence}</span>}
-            <span className="tray-score">{cafe.profiled === false ? "+" : cafe.work.toFixed(1)}</span>
+            <span className="tray-score">{cafe.work.toFixed(1)}</span>
             <span className="tray-name">{cafe.n}</span>
             <span className="tray-meta">
               {cafe.address || `${cafe.h} · ${cafe.seatingStyles.slice(0, 2).join(" / ")}`}
@@ -1230,7 +1231,7 @@ function DrawerList({
               </span>
               {getConfidence(cafe) && <span className="hd">{getConfidence(cafe)}</span>}
             </span>
-            <span className="rt">{cafe.profiled === false ? "+" : cafe.work.toFixed(1)}</span>
+            <span className="rt">{cafe.work.toFixed(1)}</span>
           </button>
           ))}
         </div>
@@ -1310,7 +1311,7 @@ function DetailView({
             ) : null}
             <div className="ai-score-row">
               <span>Workability analysis</span>
-              <strong>{workability ? workability.score.toFixed(1) : "—"} / 5</strong>
+              <strong>{(workability?.score ?? cafe.work).toFixed(1)} / 5</strong>
             </div>
             <span className="ai-confidence">
               {workabilityStatus === "loading"
@@ -1319,7 +1320,7 @@ function DetailView({
                   ? "Analysis unavailable"
                   : workability
                     ? `${workability.confidence} confidence`
-                    : "Awaiting evidence"}
+                    : "Provisional baseline · awaiting evidence"}
             </span>
             {workability && <p>{workability.verdict}</p>}
             {livePlace?.reviewSummary && (
@@ -1679,7 +1680,7 @@ function discoveredPlaceToCafe(place: GoogleCafeSummary): Cafe {
     b: place.borough,
     lng: place.lng,
     lat: place.lat,
-    work: 0,
+    work: PROVISIONAL_WORK_SCORE,
     price: "—",
     coffee: "Live details",
     food: "Live details",
