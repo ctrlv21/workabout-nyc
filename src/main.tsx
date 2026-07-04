@@ -453,7 +453,9 @@ function App() {
       map.remove();
       mapRef.current = null;
     };
-  }, [hasToken, mapMode, timeTheme, token]);
+  // Lighting changes are applied in place below. Recreating Mapbox here would
+  // discard discovered markers whose data has not changed.
+  }, [hasToken, mapMode, token]);
 
   useEffect(() => {
     if (!mapRef.current) return;
